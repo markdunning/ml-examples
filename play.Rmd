@@ -1,0 +1,102 @@
+---
+title: "BRCA"
+author: "Mark Dunning"
+date: "25 July 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+if(!require(dslabs)) install.packages("dslabs");library(dslabs)
+library(tidyverse)
+```
+
+```{r}
+data("brca")
+```
+
+```{r}
+View(brca)
+```
+
+```{r}
+meta <- brca$x
+```
+
+
+```{r}
+library(pheatmap)
+
+anno <- data.frame(Status=brca$y)
+rownames(meta) <- rownames(anno) <- 1:nrow(meta)
+pheatmap(meta,scale = "column",annotation_row = anno)
+```
+
+
+```{r}
+pca <- prcomp(meta, center=TRUE,scale=TRUE)
+summary(pca)
+```
+
+```{r}
+pca$x %>% data.frame %>% mutate(Status=brca$y) %>% 
+  ggplot(aes(x = PC1, y = PC2, col=Status)) + geom_point()
+```
+
+```{r}
+library(caret)
+set.seed(1234)
+df <- data.frame(cbind(diagnosis = factor(brca$y), brca$x))
+df$diagnosis <- factor(ifelse(df$diagnosis =="1","B","M"))
+train_indx <- createDataPartition(df$diagnosis, p = 0.7, list = FALSE)
+
+train_set <- df[train_indx,]
+test_set <- df[-train_indx,]
+
+nrow(train_set)
+```
+
+```{r}
+fitControl <- trainControl(method="cv",
+                            number = 5,
+                            preProcOptions = list(thresh = 0.99), # threshold for pca preprocess
+                            classProbs = TRUE,
+                            summaryFunction = twoClassSummary)
+```
+
+```{r}
+model_rf <- train(diagnosis~.,
+                  data = train_set,
+                  method="rf",
+                  metric="ROC",
+                  #tuneLength=10,
+                  preProcess = c('center', 'scale'),
+                  trControl=fitControl)
+```
+
+```{r}
+plot(varImp(model_rf), top = 10, main = "Random forest")
+```
+
+```{r}
+pred_rf <- predict(model_rf, test_set)
+cm_rf <- confusionMatrix(pred_rf, test_set$diagnosis, positive = "M")
+cm_rf
+```
+
+
+## TCGA
+
+```{r}
+exprs <- read_tsv("../tcga-test/HiSeqV2")
+exprs
+```
+
+```{r}
+clin <- read_tsv("../tcga-test/BRCA_clinicalMatrix")
+```
+
